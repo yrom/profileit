@@ -70,6 +70,19 @@ class ObjectWrapper(wrapt.ObjectProxy):
             #print(f"Wrapping object method: {wrapped.__class__.__name__}.{method.__name__}")
             wrapped_method = BoundCallableWrapper(method, _self_method_wrapper)
             setattr(wrapped, name, wrapped_method)
+        
+        # Wrap the sub modules when the wrapped is not a nn.Module
+        if not isinstance(wrapped, nn.Module):
+            child_modules = [
+                (n, m)
+                for (n, m) in wrapped.__dict__.items()
+                if isinstance(m, nn.Module) and not isinstance(m, wrapt.ObjectProxy)
+            ]
+            for n, module in child_modules:
+                # Wrap the module with ModuleWrapper
+                print(f"Wrapping module: {wrapped.__class__.__name__}.{n} for {module.__class__.__name__}")
+                wrapped_module = ModuleWrapper(module, ignore_fn=ignore_fn)
+                setattr(wrapped, n, wrapped_module)
 
 
 class ModuleWrapper(ObjectWrapper):
@@ -96,7 +109,7 @@ class ModuleWrapper(ObjectWrapper):
             
             for n, child in child_modules:
                 # Wrap the child module with ModuleWrapper
-                #print(f"Wrapping child module {n} of {wrapped.__class__.__name__}: {child.__class__.__name__}")
+                print(f"Wrapping child module {n} of {wrapped.__class__.__name__}: {child.__class__.__name__}")
                 wrapped_child = ModuleWrapper(child, ignore_fn=ignore_fn, skip_children=True)
                 # replace the child module with the wrapped one
                 setattr(wrapped, n, wrapped_child)
