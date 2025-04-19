@@ -7,7 +7,13 @@ ProfileIt is a Python package designed to simplify profiling of PyTorch models. 
 Install the package using pip:
 
 ```bash
-pip install profileit
+pip install git+https://github.com/yrom/profileit.git
+```
+
+Or via uv:
+
+```bash
+uv add "profileit @ git+https://github.com/yrom/profileit"
 ```
 
 ## Usage
