@@ -75,11 +75,12 @@ class ObjectWrapper(wrapt.ObjectProxy):
             wrapped_method = BoundCallableWrapper(method, _self_method_wrapper)
             setattr(wrapped, name, wrapped_method)
 
-        if inspect.isfunction(wrapped):
-            # Wrap the function with a BoundCallableWrapper
-            wrapped_function = BoundCallableWrapper(wrapped, _self_method_wrapper)
-            setattr(wrapped, wrapped.__name__, wrapped_function)
-
+        child_modules = inspect.getmembers(wrapped, predicate=lambda m: isinstance(m, nn.Module))
+        for n, child in child_modules:
+            if child != wrapped and isinstance(child, nn.Module) and not isinstance(child, wrapt.ObjectProxy):
+                # Wrap the child module with ModuleWrapper
+                # print(f"Wrapping child module: {wrapped_child.__class__.__name__}")
+                setattr(wrapped, n, ModuleWrapper(child))
 
 class ModuleWrapper(ObjectWrapper):
     def __init__(self, wrapped: nn.Module, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None):
@@ -95,14 +96,6 @@ class ModuleWrapper(ObjectWrapper):
             and ignore_fn(n, m),
         )
         # print(f"Wrapping module: {wrapped.__class__.__name__}")
-
-        child_modules = inspect.getmembers(wrapped, predicate=lambda m: isinstance(m, nn.Module))
-        for n, child in child_modules:
-            if child != wrapped and isinstance(child, nn.Module) and not isinstance(child, wrapt.ObjectProxy):
-                # Wrap the child module with ModuleWrapper
-                wrapped_child = ModuleWrapper(child)
-                # print(f"Wrapping child module: {wrapped_child.__class__.__name__}")
-                setattr(wrapped, n, wrapped_child)
 
         def _self_call_wrapper(wrapped_m, args, kwargs):
             with record_function(f"{self._self_wrapper.__class__.__name__}"):

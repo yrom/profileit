@@ -37,7 +37,7 @@ def profileit(
     operations, memory usage, and other performance metrics.
 
     Args:
-        models (Tuple[M, ...]): The model(s) to be profiled. Can be a single model or a list of models.
+        models (M): The model(s) to be profiled. Can be a single model or a list of models.
         ignore_fn (Optional[Callable[[str, Union[MethodType, Any], bool]]): A function to filter
             which operations should not be profiled. Returns true if the operation should be ignored in profiling.
         trace_report_dir: (Optional[str]): Directory to save the profiling report. If None, no report is saved.
