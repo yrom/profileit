@@ -27,7 +27,6 @@ class SimpleModel(nn.Module):
 
 if __name__ == "__main__":
     import sys
-    import os
 
     device = None
     if len(sys.argv) > 1:

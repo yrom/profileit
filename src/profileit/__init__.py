@@ -1,7 +1,7 @@
 import warnings
 from contextlib import contextmanager
 from types import MethodType
-from typing import Any, Callable, Generator, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Optional, TypeVar, Union
 
 import numpy as np
 import torch
