@@ -54,7 +54,7 @@ def profileit(
         tuple: A tuple containing:
             - The instrumented models ready for profiling
             - A generator will yield profiling steps until the profiling is done.
-    
+
     Example:
         >>> with profileit(model, schedule=ScheduleArgs(warmup=1, active=1)) as (profiled_model, step_generator):
         >>>     for step in step_generator:
@@ -65,7 +65,7 @@ def profileit(
     model_name = models[0].__class__.__name__
     for i in range(len(models)):
         profile_inject(models[i], ignore_fn=ignore_fn)
-    
+
     profile_schedule = _schedule(
         wait=schedule.wait,
         warmup=schedule.warmup,
@@ -83,18 +83,18 @@ def profileit(
         schedule=profile_schedule,
         on_trace_ready=on_trace_ready,
     )
+
     def step_generator():
         for i in range(schedule.num_steps):
             yield i
             prof.step()
+
     prof.__enter__()
     try:
         yield *models, step_generator()
     except Exception as e:
         warnings.warn(
-            "Exception occurred during profiling",
-            category=RuntimeWarning,
-            source=e
+            "Exception occurred during profiling", category=RuntimeWarning, source=e
         )
         raise
     finally:

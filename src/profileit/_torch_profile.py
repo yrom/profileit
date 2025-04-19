@@ -38,7 +38,9 @@ class BoundCallableWrapper(wrapt.ObjectProxy):
 
 
 class ObjectWrapper(wrapt.ObjectProxy):
-    def __init__(self, wrapped, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None):
+    def __init__(
+        self, wrapped, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None
+    ):
         if isinstance(wrapped, wrapt.ObjectProxy):
             raise TypeError("Cannot wrap an already wrapped object")
         super(ObjectWrapper, self).__init__(wrapped)
@@ -46,7 +48,9 @@ class ObjectWrapper(wrapt.ObjectProxy):
         self._self_wrapper = wrapped
 
         def _self_method_wrapper(wrapped_m, args, kwargs):
-            with record_function(f"{self._self_wrapper.__class__.__name__}.{wrapped_m.__name__}"):
+            with record_function(
+                f"{self._self_wrapper.__class__.__name__}.{wrapped_m.__name__}"
+            ):
                 return wrapped_m(*args, **kwargs)
 
         _class_methods = [
@@ -67,10 +71,10 @@ class ObjectWrapper(wrapt.ObjectProxy):
                 # print(f"Skipping already wrapped method: {name} in {wrapped.__class__.__name__}")
                 continue
             # Wrap the method with a BoundCallableWrapper
-            #print(f"Wrapping object method: {wrapped.__class__.__name__}.{method.__name__}")
+            # print(f"Wrapping object method: {wrapped.__class__.__name__}.{method.__name__}")
             wrapped_method = BoundCallableWrapper(method, _self_method_wrapper)
             setattr(wrapped, name, wrapped_method)
-        
+
         # Wrap the sub modules when the wrapped is not a nn.Module
         if not isinstance(wrapped, nn.Module):
             child_modules = [
@@ -80,13 +84,20 @@ class ObjectWrapper(wrapt.ObjectProxy):
             ]
             for n, module in child_modules:
                 # Wrap the module with ModuleWrapper
-                print(f"Wrapping module: {wrapped.__class__.__name__}.{n} for {module.__class__.__name__}")
+                print(
+                    f"Wrapping module: {wrapped.__class__.__name__}.{n} for {module.__class__.__name__}"
+                )
                 wrapped_module = ModuleWrapper(module, ignore_fn=ignore_fn)
                 setattr(wrapped, n, wrapped_module)
 
 
 class ModuleWrapper(ObjectWrapper):
-    def __init__(self, wrapped: nn.Module, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None, skip_children=False):
+    def __init__(
+        self,
+        wrapped: nn.Module,
+        ignore_fn: Optional[Callable[[str, MethodType], bool]] = None,
+        skip_children=False,
+    ):
         if isinstance(wrapped, wrapt.ObjectProxy):
             raise TypeError("Cannot wrap an already wrapped object")
         if not isinstance(wrapped, nn.Module):
@@ -94,9 +105,11 @@ class ModuleWrapper(ObjectWrapper):
 
         super(ModuleWrapper, self).__init__(
             wrapped,
-            ignore_fn=lambda n, m: n in ["forward", "to", "extra_repr"] or ignore_fn and ignore_fn(n, m),
+            ignore_fn=lambda n, m: n in ["forward", "to", "extra_repr"]
+            or ignore_fn
+            and ignore_fn(n, m),
         )
-        #print(f"Wrapped module: {wrapped.__class__.__name__}")
+        # print(f"Wrapped module: {wrapped.__class__.__name__}")
         # Module attributes
         if not skip_children:
             child_modules = [
@@ -106,14 +119,17 @@ class ModuleWrapper(ObjectWrapper):
                 and len(n) > 0
                 and not n.startswith("_")
             ]
-            
+
             for n, child in child_modules:
                 # Wrap the child module with ModuleWrapper
-                print(f"Wrapping child module {n} of {wrapped.__class__.__name__}: {child.__class__.__name__}")
-                wrapped_child = ModuleWrapper(child, ignore_fn=ignore_fn, skip_children=True)
+                print(
+                    f"Wrapping child module {n} of {wrapped.__class__.__name__}: {child.__class__.__name__}"
+                )
+                wrapped_child = ModuleWrapper(
+                    child, ignore_fn=ignore_fn, skip_children=True
+                )
                 # replace the child module with the wrapped one
                 setattr(wrapped, n, wrapped_child)
-
 
         def _self_call_wrapper(wrapped_m, args, kwargs):
             with record_function(f"{self._self_wrapper.__class__.__name__}"):
@@ -128,7 +144,8 @@ class ModuleWrapper(ObjectWrapper):
         name = self.__wrapped__.__class__.__qualname__
         bound_call = (
             self.__wrapped__._call_impl
-            if hasattr(self.__wrapped__, "_call_impl") and isinstance(self.__wrapped__._call_impl, BoundCallableWrapper)
+            if hasattr(self.__wrapped__, "_call_impl")
+            and isinstance(self.__wrapped__._call_impl, BoundCallableWrapper)
             else None
         )
         try:
@@ -144,7 +161,9 @@ class ModuleWrapper(ObjectWrapper):
 T = TypeVar("T")
 
 
-def profile_inject(obj: T, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None) -> T:
+def profile_inject(
+    obj: T, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None
+) -> T:
     if isinstance(obj, wrapt.ObjectProxy):
         return obj
     if inspect.isbuiltin(obj) or inspect.isclass(obj):
@@ -186,13 +205,21 @@ def profile_trace_handler(
         model_name = ""
 
     def _trace_handler(p: profile):
-        group_by_stack_n = 5  if p.with_stack else 0
+        group_by_stack_n = 5 if p.with_stack else 0
         if ProfilerActivity.CPU in p.activities:
             print("====", model_name, "Results (CPU)", "====")
-            print(p.key_averages(group_by_stack_n=group_by_stack_n).table(sort_by="self_cpu_time_total", row_limit=10))
+            print(
+                p.key_averages(group_by_stack_n=group_by_stack_n).table(
+                    sort_by="self_cpu_time_total", row_limit=10
+                )
+            )
         if ProfilerActivity.CUDA in p.activities and torch.cuda.is_available():
             print("====", model_name, "Results (CUDA)", "====")
-            print(p.key_averages(group_by_stack_n=group_by_stack_n).table(sort_by="self_cuda_time_total", row_limit=10))
+            print(
+                p.key_averages(group_by_stack_n=group_by_stack_n).table(
+                    sort_by="self_cuda_time_total", row_limit=10
+                )
+            )
         if dir is None:
             return
         if not os.path.isdir(dir):

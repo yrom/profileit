@@ -56,7 +56,9 @@ class MaskedLossV1(nn.Module):
 
         # apply the boolean mask to the targets and logits
         masked_target = target[mask]
-        masked_pred = permuted_pred[mask.unsqueeze(-1).expand(-1, -1, -1, self.num_classes)]
+        masked_pred = permuted_pred[
+            mask.unsqueeze(-1).expand(-1, -1, -1, self.num_classes)
+        ]
         masked_pred = masked_pred.reshape(-1, self.num_classes)
 
         # calculate the cross-entropy loss
@@ -96,7 +98,11 @@ class MaskedLossV2(MaskedLossV1):
     def ignore_background(self, target: Tensor) -> Tensor:
         # instead torch.nonzero, use torch.where
         # torch.nonzero causes gpu device sync
-        return torch.where(target == self.num_classes - 1, self.ignore_val * torch.ones_like(target), target)
+        return torch.where(
+            target == self.num_classes - 1,
+            self.ignore_val * torch.ones_like(target),
+            target,
+        )
 
 
 class MaskedLossV3(MaskedLossV1):
@@ -137,7 +143,9 @@ if __name__ == "__main__":
 
     num_classes = 5
     train_set = FakeDataset(num_classes=num_classes)
-    train_loader = DataLoader(train_set, batch_size=128, shuffle=True, num_workers=2, pin_memory=True)
+    train_loader = DataLoader(
+        train_set, batch_size=128, shuffle=True, num_workers=2, pin_memory=True
+    )
     model = Net(num_classes=num_classes).to(device)
     if version == "1":
         print("Using MaskedLossV1")

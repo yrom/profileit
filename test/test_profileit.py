@@ -2,6 +2,7 @@
 Source https://github.com/pytorch/tutorials/blob/main/beginner_source/profiler.py
 
 """
+
 import torch
 import torch.nn as nn
 from profileit import profileit, ScheduleArgs
@@ -25,15 +26,15 @@ class SimpleModel(nn.Module):
 
 
 if __name__ == "__main__":
-
     import sys
     import os
+
     device = None
     if len(sys.argv) > 1:
         device = sys.argv[1]
 
     model = SimpleModel(256, 10)
-    
+
     if device:
         model = model.to(device)
 
@@ -43,14 +44,14 @@ if __name__ == "__main__":
         trace_report_dir="trace_report",
         seed=42,
         profile_memory=True,
-        #with_stack=True,
+        # with_stack=True,
     ) as (profiled_model, step_generator):
         input = torch.rand((128, 256), device=device)
         mask = torch.rand((256, 256, 256), dtype=torch.float, device=device)
         for step in step_generator:
             print(f"Step {step}")
             out, idx = profiled_model(input, mask)
-        
+
     # Output
     """
 Step 0
