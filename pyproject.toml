@@ -1,6 +1,6 @@
 [project]
 name = "profileit"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python library designed to assist in profiling PyTorch models."
 readme = "README.md"
 authors = [

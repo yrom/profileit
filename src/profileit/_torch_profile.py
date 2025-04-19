@@ -1,10 +1,11 @@
 import os
 from types import BuiltinMethodType, MethodType, MethodWrapperType
-from typing import Any, Callable, Optional, TypeVar, Union
+from typing import Callable, Optional, TypeVar, Union
 
 import torch
 import wrapt
 import inspect
+
 import torch.nn as nn
 from torch.profiler import record_function
 
@@ -36,13 +37,6 @@ class BoundCallableWrapper(wrapt.ObjectProxy):
         return self._self_wrapper(self.__wrapped__, args, kwargs)
 
 
-def is_class_self_method(cls, method: MethodType):
-    assert inspect.isclass(cls), "cls must be a class"
-    if isinstance(method, MethodType):
-        return method.__name__ in cls.__dict__ or method.__qualname__.startswith(cls.__name__ + ".")
-    return False
-
-
 class ObjectWrapper(wrapt.ObjectProxy):
     def __init__(self, wrapped, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None):
         if isinstance(wrapped, wrapt.ObjectProxy):
@@ -55,17 +49,19 @@ class ObjectWrapper(wrapt.ObjectProxy):
             with record_function(f"{self._self_wrapper.__class__.__name__}.{wrapped_m.__name__}"):
                 return wrapped_m(*args, **kwargs)
 
-        wrapped_methods = inspect.getmembers(
-            wrapped,
-            predicate=lambda m: inspect.ismethod(m)
-            and not isinstance(m, MethodWrapperType)
+        _class_methods = [
+            (n, m)
+            for (n, m) in wrapped.__dict__.items()
+            if inspect.ismethod(m)
             and not isinstance(m, BuiltinMethodType)
-            and not m.__name__.startswith("_")
-            and not m.__name__.endswith("_")
-            and is_class_self_method(wrapped.__class__, m),
-        )
-        for name, method in wrapped_methods:
-            if name.startswith("_") or ignore_fn is not None and ignore_fn(name, method):
+            and not isinstance(m, MethodWrapperType)
+            and not n.startswith("_")
+            or (ignore_fn is not None and ignore_fn(n, m))
+            # and not n.endswith("_")
+        ]
+
+        for name, method in _class_methods:
+            if ignore_fn is not None and ignore_fn(name, method):
                 continue
             if isinstance(method, wrapt.ObjectProxy):
                 # print(f"Skipping already wrapped method: {name} in {wrapped.__class__.__name__}")
@@ -75,15 +71,9 @@ class ObjectWrapper(wrapt.ObjectProxy):
             wrapped_method = BoundCallableWrapper(method, _self_method_wrapper)
             setattr(wrapped, name, wrapped_method)
 
-        child_modules = inspect.getmembers(wrapped, predicate=lambda m: isinstance(m, nn.Module))
-        for n, child in child_modules:
-            if child != wrapped and isinstance(child, nn.Module) and not isinstance(child, wrapt.ObjectProxy):
-                # Wrap the child module with ModuleWrapper
-                # print(f"Wrapping child module: {wrapped_child.__class__.__name__}")
-                setattr(wrapped, n, ModuleWrapper(child))
 
 class ModuleWrapper(ObjectWrapper):
-    def __init__(self, wrapped: nn.Module, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None):
+    def __init__(self, wrapped: nn.Module, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None, skip_children=False):
         if isinstance(wrapped, wrapt.ObjectProxy):
             raise TypeError("Cannot wrap an already wrapped object")
         if not isinstance(wrapped, nn.Module):
@@ -91,11 +81,26 @@ class ModuleWrapper(ObjectWrapper):
 
         super(ModuleWrapper, self).__init__(
             wrapped,
-            ignore_fn=lambda n, m: n in ["forward", "to", "extra_repr", "reset_parameters"]
-            or ignore_fn
-            and ignore_fn(n, m),
+            ignore_fn=lambda n, m: n in ["forward", "to", "extra_repr"] or ignore_fn and ignore_fn(n, m),
         )
-        # print(f"Wrapping module: {wrapped.__class__.__name__}")
+        #print(f"Wrapped module: {wrapped.__class__.__name__}")
+        # Module attributes
+        if not skip_children:
+            child_modules = [
+                (n, c)
+                for n, c in wrapped.named_modules()
+                if not isinstance(c, wrapt.ObjectProxy)
+                and len(n) > 0
+                and not n.startswith("_")
+            ]
+            
+            for n, child in child_modules:
+                # Wrap the child module with ModuleWrapper
+                #print(f"Wrapping child module {n} of {wrapped.__class__.__name__}: {child.__class__.__name__}")
+                wrapped_child = ModuleWrapper(child, ignore_fn=ignore_fn, skip_children=True)
+                # replace the child module with the wrapped one
+                setattr(wrapped, n, wrapped_child)
+
 
         def _self_call_wrapper(wrapped_m, args, kwargs):
             with record_function(f"{self._self_wrapper.__class__.__name__}"):
@@ -168,7 +173,7 @@ def profile_trace_handler(
         model_name = ""
 
     def _trace_handler(p: profile):
-        group_by_stack_n = 5  # if p.with_stack else 0
+        group_by_stack_n = 5  if p.with_stack else 0
         if ProfilerActivity.CPU in p.activities:
             print("====", model_name, "Results (CPU)", "====")
             print(p.key_averages(group_by_stack_n=group_by_stack_n).table(sort_by="self_cpu_time_total", row_limit=10))
