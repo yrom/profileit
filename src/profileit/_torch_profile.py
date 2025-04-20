@@ -36,6 +36,11 @@ class BoundCallableWrapper(wrapt.ObjectProxy):
             return self.__wrapped__(*args, **kwargs)
         return self._self_wrapper(self.__wrapped__, args, kwargs)
 
+def _isModulesContainer(obj):
+    """
+    Check if the object is a container of nn.Module objects.
+    """
+    return isinstance(obj, (nn.Sequential, nn.ModuleList, nn.ModuleDict, nn.ParameterList, nn.ParameterDict))
 
 class ObjectWrapper(wrapt.ObjectProxy):
     def __init__(self, wrapped, ignore_fn: Optional[Callable[[str, MethodType], bool]] = None):
@@ -49,24 +54,27 @@ class ObjectWrapper(wrapt.ObjectProxy):
             with record_function(f"{self._self_wrapper.__class__.__name__}.{wrapped_m.__name__}"):
                 return wrapped_m(*args, **kwargs)
 
-        _class_methods = [
-            (n, m)
-            for (n, m) in wrapped.__dict__.items()
-            if inspect.ismethod(m)
-            and not isinstance(m, BuiltinMethodType)
-            and not isinstance(m, MethodWrapperType)
-            and not n.startswith("__")
-            or (ignore_fn is not None and ignore_fn(n, m))
-        ]
+        if _isModulesContainer(wrapped):
+            _class_methods = []
+        else:
+            _class_methods = [
+                (n, m)
+                for (n, m) in inspect.getmembers(
+                    wrapped,
+                    predicate=lambda m: inspect.ismethod(m)
+                    and not isinstance(m, (BuiltinMethodType, MethodWrapperType))
+                    and not isinstance(m, wrapt.ObjectProxy)
+                    and not m.__qualname__.startswith("Module."),  # ignore Module methods
+                )
+                if not n.startswith("__") and not (ignore_fn and ignore_fn(n, m))
+            ]
 
         for name, method in _class_methods:
-            if ignore_fn is not None and ignore_fn(name, method):
-                continue
-            if isinstance(method, wrapt.ObjectProxy):
-                # print(f"Skipping already wrapped method: {name} in {wrapped.__class__.__name__}")
-                continue
+            # if isinstance(method, wrapt.ObjectProxy):
+            # print(f"Skipping already wrapped method: {name} in {wrapped.__class__.__name__}")
+            # continue
             # Wrap the method with a BoundCallableWrapper
-            # print(f"Wrapping object method: {wrapped.__class__.__name__}.{method.__name__}")
+            #print(f"Wrapping object method: {wrapped.__class__.__name__}.{method.__name__}")
             wrapped_method = BoundCallableWrapper(method, _self_method_wrapper)
             setattr(wrapped, name, wrapped_method)
 
@@ -79,7 +87,7 @@ class ObjectWrapper(wrapt.ObjectProxy):
             ]
             for n, module in child_modules:
                 # Wrap the module with ModuleWrapper
-                print(f"Wrapping module: {wrapped.__class__.__name__}.{n} for {module.__class__.__name__}")
+                #print(f"Wrapping module: {wrapped.__class__.__name__}.{n} for {module.__class__.__name__}")
                 wrapped_module = ModuleWrapper(module, ignore_fn=ignore_fn)
                 setattr(wrapped, n, wrapped_module)
 
@@ -99,7 +107,18 @@ class ModuleWrapper(ObjectWrapper):
 
         super(ModuleWrapper, self).__init__(
             wrapped,
-            ignore_fn=lambda n, m: n in ["forward", "to", "extra_repr"] or ignore_fn and ignore_fn(n, m),
+            ignore_fn=lambda n, m: ignore_fn(n, m)
+            if ignore_fn
+            else n
+            in [
+                "forward",
+                "to",
+                "extra_repr",
+                "_call_impl",
+                "remove_weight_norm",
+                "reset_parameters",
+                "reset_running_stats",
+            ],
         )
         self._self_module_name = (module_name + ": " if module_name else "") + wrapped.__class__.__qualname__
         # print(f"Wrapped module: {wrapped.__class__.__name__}")
