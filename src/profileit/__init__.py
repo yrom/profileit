@@ -28,6 +28,7 @@ def profileit(
     schedule=ScheduleArgs(),
     trace_report_dir: Optional[str] = None,
     seed: Optional[int] = None,
+    eanble_profile: bool = True,
     **profile_args,
 ):
     """A context manager for profiling PyTorch model inference.
@@ -44,6 +45,8 @@ def profileit(
         schedule (ScheduleArgs): Schedule for profiling steps. It defines the wait, warmup,
             active, and repeat steps for profiling. see torch.profiler.schedule for details.
         seed (Optional[int]): Random seed for reproducibility. If None, no seed is set.
+        eanble_profile (bool): Whether to enable profiling. If False, the function will
+            skip profiling and yield the models without any modifications.
         **profile_args: Additional arguments to pass to torch.profiler.profile:
             - activities (Optional[set]): Set of activities to profile (e.g.,
                 {ProfilerActivity.CPU, ProfilerActivity.CUDA}).
@@ -62,6 +65,11 @@ def profileit(
         >>>         print(f"Step {step}")
         >>>         out, idx = profiled_model(input, mask)
     """
+    def step_generator():
+        yield from range(schedule.num_steps)
+    if not eanble_profile:
+        yield *models, step_generator()
+        return
     model_name = models[0].__class__.__name__
     for i in range(len(models)):
         profile_inject(models[i], ignore_fn=ignore_fn)
@@ -74,8 +82,14 @@ def profileit(
     )
     on_trace_ready = profile_trace_handler(trace_report_dir, model_name=model_name)
     if seed is not None:
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+        try:
+            from transformers import set_seed
+            set_seed(seed)
+        except ImportError:
+            np.random.seed(seed)
+            torch.manual_seed(seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(seed)
     prof = profile(
         activities=profile_args.get("activities", supported_activities()),
         profile_memory=profile_args.get("profile_memory", False),
